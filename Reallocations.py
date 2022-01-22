@@ -17,8 +17,9 @@ if len(argv) < 2:
 
 
 # TO DO
+#  figure out what to do with libraries that have multiple symbols, e.g. Tufts - don't assign from one to the other. 
+
 #  -- make flowchart/documentation of what script does? or in conjunction with script that builds input file
-#   FIX AROUND LINE 210 TO MAKE SURE ASSIGNED REALLOCS NOT ALREADY RETAINED!!!!!!!!!!!!!!!!
 ## UPDATE reports_dir variable before running. Note that script DELETES anything in that dir when starting
 ##  this script last run on live data Dec 28, 2021
 ##  since then have run with test reports_dir as output to try to fix summary report which had wrong sum # allocated
@@ -187,16 +188,15 @@ def main():
             disposition[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             unique_to_EAST[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             continue
-        print("_______-")
+        #print("_______-")
 
         print("holders:  ", holderslist)
-        #print("retainers:", retainerslist)
-        #print("_______-")
+        
         #for holder in holderslist: # remove all retainers from holders list, recalculate number of holders - logic wrong here as removing from list shortens - not all found
          #   if holder in retainerslist:
          #       holderslist.remove(holder)
          #       numberEASTHoldings -=1 # calculate number of spare copy holders, i.e. not retainers
-        holderslist = list(set(holderslist) - set(retainerslist)) # I think this does the same as above.
+        holderslist = list(set(holderslist) - set(retainerslist)) # this actually works
 
                     
         if numberEASTHoldings == 0: # no spare copies in EAST, all holders were retainers, write to disp 
