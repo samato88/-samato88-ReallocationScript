@@ -15,6 +15,10 @@ if len(argv) < 2:
   print("Must provide file name to process!")
   sys.exit()
 
+
+# TO DO
+#  -- make flowchart/documentation of what script does? or in conjunction with script that builds input file
+#   FIX AROUND LINE 210 TO MAKE SURE ASSIGNED REALLOCS NOT ALREADY RETAINED!!!!!!!!!!!!!!!!
 ## UPDATE reports_dir variable before running. Note that script DELETES anything in that dir when starting
 ##  this script last run on live data Dec 28, 2021
 ##  since then have run with test reports_dir as output to try to fix summary report which had wrong sum # allocated
@@ -28,8 +32,6 @@ if len(argv) < 2:
 # excel files with disposition of requests, any uniques, and any requests to retain for EAST
 # also makes a summary sheet - Take UNIQUE tab and ADDED TO TRACKING SHEET 
 #
-# TO DO
-#  -- make flowchart/documentation of what script does? or in conjunction with script that builds input file
 
 # NOTE "XlsxWriter is designed only as a file writer. It cannot read or modify an existing Excel file." - https://xlsxwriter.readthedocs.io/faq.html#q-can-xlsxwriter-use-an-existing-excel-file-as-a-template
 # so have to use openpyxl if want to ADD a sheet to existing file. This means reworking formatting headers. 
@@ -81,7 +83,7 @@ def columnHeader(sheet): # in theory could alternatively create named stye
 def main():
     starttime = time.time()
     #reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2021/2021Reports/"
-    reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2021/test/"
+    reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/tests/"
 
     for files in os.listdir(reports_dir): # clear out directory for this run (I think this is okay to do)
         path = os.path.join(reports_dir, files)
@@ -146,7 +148,6 @@ def main():
 
         #if np.isnan(cocn): # NaN, not a valid OCN, report and move on
         if not cocn: # cocn is empty string, report and move on
-            #print("HERE line: ", x)
             cocn = "Invalid OCN Submitted"
             if not (title):
                 title = ""
@@ -154,7 +155,6 @@ def main():
             continue
         else: # make these ints - were floats, e.g. 650.0 and make list type for holders and retainers
             cocn = int(cocn)
-            #print("line ", x, " ", numberEASTRetained)
             numberEASTHoldings = int(numberEASTHoldings)
             numberEASTRetained = int(numberEASTRetained)
             
@@ -166,7 +166,7 @@ def main():
                 holderslist =  list(eastHolders.split(",")) ## make list of east holders
             except:
                 holderslist = []
-            
+
             if (numberEASTRetained > 0) and (len(retainerslist) != numberEASTRetained): # just a little sanity checking
                 print("SCRIPT ERROR - numberEASTRetained does not equal length of retainerslist")
 
@@ -177,21 +177,27 @@ def main():
             syminholderslist = "YES" # doing this separately from below so can flag things that still have holdings set
             holderslist.remove(sym)
             numberEASTHoldings -= 1  
-            
+        
         if sym in retainerslist:  # Remove sym from eastRetainers - note if still has retention on it
             syminretentionslist = "YES"
             retainerslist.remove(sym)
             numberEASTRetained -=1
-            
+
         if numberEASTHoldings == 0: # unique to EAST, write to disp and unique
             disposition[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             unique_to_EAST[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             continue
-        
-        for holder in holderslist: # remove all retainers from holders list, recalculate number of holders
-            if holder in retainerslist:
-                holderslist.remove(holder)
-                numberEASTHoldings -=1 # calculate number of spare copy holders, i.e. not retainers
+        print("_______-")
+
+        print("holders:  ", holderslist)
+        #print("retainers:", retainerslist)
+        #print("_______-")
+        #for holder in holderslist: # remove all retainers from holders list, recalculate number of holders - logic wrong here as removing from list shortens - not all found
+         #   if holder in retainerslist:
+         #       holderslist.remove(holder)
+         #       numberEASTHoldings -=1 # calculate number of spare copy holders, i.e. not retainers
+        holderslist = list(set(holderslist) - set(retainerslist)) # I think this does the same as above.
+
                     
         if numberEASTHoldings == 0: # no spare copies in EAST, all holders were retainers, write to disp 
             disposition[sym].append([sym, socn, "no unretained copies in EAST", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
@@ -207,8 +213,11 @@ def main():
             #print("Assigning realloc HERE")
             if len(holderslist) == 0:
                 print("Script Logic Error, script line 168ish, data line: " + str(x))
-            #randomly pick a remaining holder and write to both disp and realloc requests - make sure to key correct symbol for realloc request
+            print("holders:  ", holderslist)
+            print("retainers:", retainerslist)
+            
             realloc_lib = random.choice(holderslist) # a better allocation method would be to look at ALL holders across ALL requests and allocate
+            print(realloc_lib)
             disposition[sym].append([sym, socn, realloc_lib, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             request_retain[realloc_lib].append([realloc_lib, socn, sym, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat]) 
            
@@ -217,8 +226,6 @@ def main():
             disposition[sym].append([sym, socn, "PROCESSING SCRIPT ERROR", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
 
     ##### this marks the end of processing the input file of retention reallocation requests with their oclc holdings
-
-
 
     disp_column_names    = ["Symbol", "Sumbitted OCLC #", "Disposition", "WorldCat Current OCLC #", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings", "Symbol Holdings Set", "Symbol Retention Set"]
     unique_column_names  = ["Symbol", "Sumbitted OCLC #", "Disposition", "WorldCat Current OCLC #", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings", "Symbol Holdings Set", "Symbol Retention Set"]
