@@ -84,7 +84,9 @@ def columnHeader(sheet): # in theory could alternatively create named stye
 def main():
     starttime = time.time()
     #reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2021/2021Reports/"
-    reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/tests/"
+    reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2022/2022Reports/"
+
+    #reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/tests/"
 
     for files in os.listdir(reports_dir): # clear out directory for this run (I think this is okay to do)
         path = os.path.join(reports_dir, files)
@@ -156,8 +158,11 @@ def main():
             continue
         else: # make these ints - were floats, e.g. 650.0 and make list type for holders and retainers
             cocn = int(cocn)
-            numberEASTHoldings = int(numberEASTHoldings)
-            numberEASTRetained = int(numberEASTRetained)
+            #print("line", x)
+            #print(numberEASTHoldings)
+            #print(numberEASTRetained)
+            numberEASTHoldings = int(numberEASTHoldings) # this will fail if cell is empty
+            numberEASTRetained = int(numberEASTRetained) # this will fail if cell is empty
             
             try:
                 retainerslist = list(eastRetainers.split(",")) ## make list of east retainers
@@ -183,21 +188,13 @@ def main():
             syminretentionslist = "YES"
             retainerslist.remove(sym)
             numberEASTRetained -=1
+            
+        holderslist = list(set(holderslist) - set(retainerslist)) # remove retainers from holderslist so they don't get allocated again
 
-        if numberEASTHoldings == 0: # unique to EAST, write to disp and unique
+        if numberEASTHoldings == 0 or len(holderslist) == 0: # unique to EAST or no unretained copies, write to disp and unique
             disposition[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             unique_to_EAST[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             continue
-        #print("_______-")
-
-        print("holders:  ", holderslist)
-        
-        #for holder in holderslist: # remove all retainers from holders list, recalculate number of holders - logic wrong here as removing from list shortens - not all found
-         #   if holder in retainerslist:
-         #       holderslist.remove(holder)
-         #       numberEASTHoldings -=1 # calculate number of spare copy holders, i.e. not retainers
-        holderslist = list(set(holderslist) - set(retainerslist)) # this actually works
-
                     
         if numberEASTHoldings == 0: # no spare copies in EAST, all holders were retainers, write to disp 
             disposition[sym].append([sym, socn, "no unretained copies in EAST", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
@@ -212,12 +209,12 @@ def main():
         if numberEASTRetained < 5: # check for surplus holdings copies,
             #print("Assigning realloc HERE")
             if len(holderslist) == 0:
-                print("Script Logic Error, script line 168ish, data line: " + str(x))
-            print("holders:  ", holderslist)
-            print("retainers:", retainerslist)
+                print("Script Logic Error, script line 213ish, data line: " + str(x))
+                print("holders:  ", holderslist)
+                print("retainers:", retainerslist)
             
             realloc_lib = random.choice(holderslist) # a better allocation method would be to look at ALL holders across ALL requests and allocate
-            print(realloc_lib)
+            #print(realloc_lib)
             disposition[sym].append([sym, socn, realloc_lib, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             request_retain[realloc_lib].append([realloc_lib, socn, sym, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat]) 
            
@@ -232,9 +229,9 @@ def main():
     realloc_column_names = ["Symbol", "Requested OCLC #", "Requesting Library", "WorldCat Current OCN", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings"]
     #print(type(disposition)) # <class 'collections.defaultdict'>
     #print(type(disposition['NKF'])) # <class 'list'>
-    allDisposition = pd.DataFrame(columns=disp_column_names)
     allUnique  = pd.DataFrame(columns=unique_column_names)
     allRealloc = pd.DataFrame(columns=realloc_column_names)
+    allDisposition = pd.DataFrame(columns=disp_column_names)
 
     headerstyle = {"font_name": "Calibri", "font_size": "14", "bold": "True", "bg_color": "#6495ED", "text_wrap": "True", "valign": "Top"}
 
@@ -262,10 +259,15 @@ def main():
             uniquedf.to_excel(writer, sheet_name="Unique", index=False)
             columnHeader(workbook["Unique"])
 
-        writer.save()
+        #writer.save()
+        workbook.save(excelfilename)
+        
+        #allDisposition = allDisposition.append(dispdf, ignore_index = True) # append was removed from pandas 2.x
+        allDisposition  = pd.concat([allDisposition, dispdf])
 
-        allDisposition = allDisposition.append(dispdf, ignore_index = True)
-        allUnique = allUnique.append(uniquedf, ignore_index = True)
+        #allUnique = allUnique.append(uniquedf, ignore_index = True) # append was removed from pandas 2.x
+        allUnique  = pd.concat([allUnique, uniquedf])
+
     
     for lib in request_retain: # foreach lib in the request retain for EAST report - this is what we want them to consider retaining
         # updated symbol_dict to include number requested retained for summary report
@@ -279,21 +281,26 @@ def main():
         
         ## check if file exists - if so open in append
         if os.path.exists(excelfilename):
+            print(excelfilename)
             with pd.ExcelWriter(excelfilename, engine="openpyxl", mode="a") as writer:  
                 workbook  = writer.book
                 if not reallocdf.empty: # just checking, should actually never be empty if you've made this far            
                     reallocdf.to_excel(writer, sheet_name='Request Retain for EAST', index=False)
                     columnHeader(workbook['Request Retain for EAST'])
-                    writer.save()
+                    #writer.save()
+                    workbook.save(excelfilename)
         else:
             writer = pd.ExcelWriter(excelfilename, engine="openpyxl")
             workbook  = writer.book        
             if not reallocdf.empty: # just checking, should actually never be empty if you've made this far            
                 reallocdf.to_excel(writer, sheet_name='Request Retain for EAST', index=False)
                 columnHeader(workbook['Request Retain for EAST'])
-                writer.save()
+                #writer.save()
+                workbook.save(writer)
        
-        allRealloc = allRealloc.append(reallocdf, ignore_index = True)
+        #allRealloc = allRealloc.append(reallocdf, ignore_index = True) # append was removed from pandas 2.x
+        allRealloc  = pd.concat([allRealloc, reallocdf])
+
 
     # Summary reports  
     allSummary = pd.DataFrame(symbol_dict).transpose(copy=True) # 

@@ -14,7 +14,7 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 # The ID and range  of members spreadsheet.
 MEMBER_SPREADSHEET_ID = '1ceiwwnXj-Gv3W9tXXppAlx2nh4kX0SqM3z_-cDOo1Xg'
-MEMBER_RANGE_NAME = 'Members!A:R'
+MEMBER_RANGE_NAME = 'Members!A:S'
 
 def getMembers(memtype):
 
@@ -57,11 +57,11 @@ def getMembers(memtype):
         print('No data found.')
     else:
         for row in values:
-            #print('%s, %s, %s, %s' % (row[0], row[5], row[12], row[17]))
+            #print('%s, %s, %s, %s' % (row[0], row[5], row[12], row[18]))
             if row[0] == 'Inst_ID': # skip 1st row
                 continue 
             # print(members[row[0]])
-            members[row[0]] = {'valscore': row[2], 'name': row[5], 'mtype': row[12], 'symbols': row[17] } # using inst id as key 
+            members[row[0]] = {'valscore': row[2], 'name': row[5], 'mtype': row[12], 'symbols': row[18] } # using inst id as key 
 
     # fix union college (cohort 2) name so that they end up in same files as union college
     members['13946']['name']="Union College"
