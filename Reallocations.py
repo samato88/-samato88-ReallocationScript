@@ -21,9 +21,11 @@ if len(argv) < 2:
 
 #  -- make flowchart/documentation of what script does? or in conjunction with script that builds input file
 ## UPDATE reports_dir variable before running. Note that script DELETES anything in that dir when starting
-##  this script last run on live data Dec 28, 2021
-##  since then have run with test reports_dir as output to try to fix summary report which had wrong sum # allocated
-##  python3 Reallocations.py  ../2021/2021Input/201906-202112-ToReallocate.WithHoldings.3rdFullRun.csv 
+##  this script last run on live data May 2023
+##  have run with test reports_dir as output to try to fix summary report which had wrong sum # allocated
+## (Reallocation) samato:~/Dropbox/EAST/OCLC/Reallocation/Script>
+##     python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/2022/2022-ToReallocate-WithHoldings.csv
+
 
 # input file must have these headers (these are created by default by script that looks up data in OCLC api - pySharedPrint):
 ### "Symbol", "oclcNumber", "Current OCN", "merged_OCNs", "Title", "# EAST Holdings", "EAST Holdings Symbols", 
@@ -191,12 +193,12 @@ def main():
             
         holderslist = list(set(holderslist) - set(retainerslist)) # remove retainers from holderslist so they don't get allocated again
 
-        if numberEASTHoldings == 0 or len(holderslist) == 0: # unique to EAST or no unretained copies, write to disp and unique
+        if numberEASTHoldings == 0: # unique to EAST or no unretained copies, write to disp and unique
             disposition[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             unique_to_EAST[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             continue
-                    
-        if numberEASTHoldings == 0: # no spare copies in EAST, all holders were retainers, write to disp 
+        
+        if len(holderslist) == 0:  # no spare copies in EAST, all holders were retainers, write to disp
             disposition[sym].append([sym, socn, "no unretained copies in EAST", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             #unique_to_EAST[sym].append([sym, socn, "no unretained copies in EAST", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             continue
