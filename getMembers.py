@@ -26,6 +26,8 @@ def getMembers(memtype):
     #print("MEMTYPE:" + memtype)
     members = dict()
     oclcsymbols = dict()
+    multisymbols = dict() # which libs have more than one symbol
+
     creds = None
     # The file token.pickle stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
@@ -65,29 +67,33 @@ def getMembers(memtype):
 
     # fix union college (cohort 2) name so that they end up in same files as union college
     members['13946']['name']="Union College"
-    
+
     for mem in members:
         #print (members[mem]['name'])
-        # if mtype has memtype load up oclcsymbols - has to be split on space
-        # push these onto oclcsymbols members[mem]['symbols'].split(' ')
-        #s = "Name1=Value1;Name2=Value2;Name3=Value3"
-        #>>> dict(item.split("=") for item in s.split(";"))
        
-        if re.search(memtype, members[mem]['mtype']) :   # if re.search(pattern, text)
+        if re.search(memtype, members[mem]['mtype']) :   # if re.search(pattern, text)  if mtype has memtype load up oclcsymbols - has to be split on space
             #print (members[mem]['symbols'])
-            for sym in members[mem]['symbols'].split(" ") :
-                libname = members[mem]['name'] 
-                libname =libname.replace("(", "") # rm (, ),' and sub space with _   e.g. St. Mary's to St_Marys
-                libname = libname.replace(")", "")
-                libname =libname.replace("'", "")
-                libname =libname.replace(".", "")                  
-                libname =libname.replace(" ", "_")
-                #print(libname)
+            libname = members[mem]['name'] 
+            libname =libname.replace("(", "") # rm (, ),' and sub space with _   e.g. St. Mary's to St_Marys
+            libname = libname.replace(")", "")
+            libname =libname.replace("'", "")
+            libname =libname.replace(".", "")                  
+            libname =libname.replace(" ", "_")
+            
+            syms = members[mem]['symbols'].split(" ")
+            if len(syms) > 1:
+                #print(len(syms), libname)
+                multisymbols[libname] = (",".join(syms)) # make multisymbols a comma separated string
+                #print(libname, ":", multisymbols[libname])
+            for sym in syms:
+            #for sym in members[mem]['symbols'].split(" ") :
+
+                #print("*", sym, "*")
                 oclcsymbols[sym.upper()] = libname # return keyed on symbol = name
                 
     #print(', '.join(oclcsymbols))
 
-    return oclcsymbols;
+    return oclcsymbols, multisymbols; # returns two dicts - sym{libname}, multisymboslib{their symbols}
 
 if __name__ == '__main__': # sometimes need to run this from the command line to refresh authorization
     getMembers("Monographs","","") # need to remember what those last two are for

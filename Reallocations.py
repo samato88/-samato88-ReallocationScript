@@ -12,19 +12,21 @@ import getMembers
 from openpyxl.styles import Font, Fill, NamedStyle, Border, Side, PatternFill, Alignment
 
 if len(argv) < 2:
-  print("Must provide file name to process!")
-  sys.exit()
+    print("Must provide file name to process!")
+    sys.exit()
 
 
-# TO DO
-#  figure out what to do with libraries that have multiple symbols, e.g. Tufts - don't assign from one to the other. 
+# Latest Updates
+#  dealing with multiple symbols, e.g. Tufts - don't assign from one to the other. 
+#  add testing asserts
 
-#  -- make flowchart/documentation of what script does? or in conjunction with script that builds input file
-## UPDATE reports_dir variable before running. Note that script DELETES anything in that dir when starting
+# Flowchart: https://lucid.app/lucidchart/daed3c42-4466-4311-9189-93d619793a45/edit?viewport_loc=383%2C384%2C1599%2C1513%2C0_0&invitationId=inv_d0a64fd9-e2c9-433c-b767-9c98a2070647
+
+## UPDATE reports_dir variable ln 90 before running. Note that script DELETES anything in that dir when starting
 ##  this script last run on live data May 2023
 ##  have run with test reports_dir as output to try to fix summary report which had wrong sum # allocated
 ## (Reallocation) samato:~/Dropbox/EAST/OCLC/Reallocation/Script>
-##     python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/2022/2022-ToReallocate-WithHoldings.csv
+##     python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/2023/2024-WithHoldings.NoPascal.csv
 
 
 # input file must have these headers (these are created by default by script that looks up data in OCLC api - pySharedPrint):
@@ -82,13 +84,19 @@ def columnHeader(sheet): # in theory could alternatively create named stye
         sheet.column_dimensions['K'].width = 15        
         sheet.column_dimensions['L'].width = 14
         sheet.column_dimensions['M'].width = 14
+        
 
 def main():
     starttime = time.time()
-    #reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2021/2021Reports/"
-    reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2022/2022Reports/"
+    Testing = False
+    
+    if Testing: #python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/sampleInput.csv
+        reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/Tests/"
+    else:
+        #reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2021/2021Reports/"
+        #reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2022/2022Reports/"
+        reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/2023/2023Reports/"
 
-    #reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/tests/"
 
     for files in os.listdir(reports_dir): # clear out directory for this run (I think this is okay to do)
         path = os.path.join(reports_dir, files)
@@ -107,8 +115,8 @@ def main():
     countTotal = 0
     prevlibrary = ''
     
-    memtype = 'Monographs'
-    libnames = getMembers.getMembers(memtype) # load up oclcsymbol =>libname hash
+    memtype = 'Monographs' # what type of members should be included in realloc - that gets monographs and consortial monographs
+    libnames, multisymbols = getMembers.getMembers(memtype) # load up oclcsymbol =>libname hash, and multisymbols dict for libs w/ more than one
   
     df = pd.read_csv(myfile, keep_default_na=False) 
     #df = pd.read_csv(myfile) 
@@ -126,11 +134,12 @@ def main():
     
     for x in df.index: # for each line in the input file
         
-        if not df.loc[x, "Symbol"] : # checking that symbol. not blank, skip any blanks, shouldn't be any!
+        if not df.loc[x, "Symbol"] : # checking that symbol not blank, skip any blanks, shouldn't be any!
             #print(type(df.loc[x, "Symbol"]))   
             continue
 
         sym = df.loc[x, "Symbol"].strip() # strip removes leading/trailing whitespace  #print("*" + df.loc[x, "Symbol"] + "*")
+        #print("*", sym, "*")
         socn = df.loc[x, "oclcNumber"]
         cocn = df.loc[x, "Current OCN"]
         mocn = df.loc[x, "merged_OCNs"]
@@ -140,7 +149,7 @@ def main():
         worldCat = df.loc[x, "# US WorldCat Holdings"]
         numberEASTRetained = df.loc[x, "# EAST Retained"]
         eastRetainers = df.loc[x, "EAST Retained Symbols"]
-        status = df.loc[x, "status"]
+        status = df.loc[x, "status"] # should probably check status is 'success' at some point
         
         syminholderslist = ""
         syminretentionslist = ""
@@ -176,31 +185,70 @@ def main():
                 holderslist = []
 
             if (numberEASTRetained > 0) and (len(retainerslist) != numberEASTRetained): # just a little sanity checking
-                print("SCRIPT ERROR - numberEASTRetained does not equal length of retainerslist")
+                print("SCRIPT ERROR - numberEASTRetained does not equal length of retainerslist", cocn)
 
             if (numberEASTHoldings > 0) and (len(holderslist) != numberEASTHoldings):
-                print("SCRIPT ERROR - numberEASTHoldings does not equal length of holderslist")
+                print("SCRIPT ERROR - numberEASTHoldings does not equal length of holderslist", cocn)
 
-        if sym in holderslist: # check if sym in holders list, if so remove and decrement holdings
-            syminholderslist = "YES" # doing this separately from below so can flag things that still have holdings set
-            holderslist.remove(sym)
-            numberEASTHoldings -= 1  
-        
-        if sym in retainerslist:  # Remove sym from eastRetainers - note if still has retention on it
-            syminretentionslist = "YES"
-            retainerslist.remove(sym)
-            numberEASTRetained -=1
+        if libnames[sym] in multisymbols: # this row has a library with multi symbols  
+            multisymbolslist = multisymbols[libnames[sym]].split(',')
+            if Testing:
+                print("MultiSymbols:" , sym, ":", multisymbolslist)
+                print("  Retainers:", retainerslist)
+                print("  Holders  :", holderslist)        
             
+        if (sym in holderslist) or ('multisymbolslist' in locals() and any(item in multisymbolslist for item in holderslist)):
+        #if sym in holderslist: # check if sym in holders list, if so remove and decrement holdings, remove all multisymbols also from holdings
+            syminholderslist = "YES" # doing this separately from below so can flag things that still have holdings set, will be yes even if multisymbol 
+            if 'multisymbolslist' in locals(): # multisymbol list exists, remove all symbols for this lib from holders
+                holderslist = [item for item in holderslist if item not in multisymbolslist] # remove all lib symbols from holders list
+                if Testing:
+                        print("  Sym in Holders List", sym)
+                        print("  Updated holders list:", holderslist)
+                        if cocn == 222 or cocn == 7777777:
+                            assert len(holderslist) == 1 # holderslist for test 222 should just be single symbol RRR
+            else: 
+                holderslist.remove(sym)
+                
+            numberEASTHoldings -= 1  
+            
+        if sym in retainerslist:
+            syminretentionslist = "YES"
+            retainerslist.remove(sym) # just the one to remove
+            numberEASTRetained -=1 # decrement retention count since this was put in for reallocation
+         
+        '''   mulling over if need to do anything with multisymbols for already retained
+        if (sym in retainerslist) or ('multisymbolslist' in locals() and any(item in multisymbolslist for item in retainerslist)):
+        # Remove sym or any multisym from eastRetainers - note if still has retention on it
+            syminretentionslist = "YES"
+            if 'multisymbolslist' in locals(): # add all symbols to retainederslist
+                combined_set = set(retainerslist + multisymbolslist) # Convert lists to a set to remove duplicates and combine
+                retainerslist = list(combined_set) # Convert set back to list 
+                if Testing:
+                    print("  Retainers after combined:", retainerslist)
+                    if cocn == 222:
+                        assert len(retainerslist) == 4
+            else:
+                retainerslist.remove(sym) # just the one to remove
+                
+            numberEASTRetained -=1 # decrement retention count since this was put in for reallocation
+         '''   
+
         holderslist = list(set(holderslist) - set(retainerslist)) # remove retainers from holderslist so they don't get allocated again
 
-        if numberEASTHoldings == 0: # unique to EAST or no unretained copies, write to disp and unique
+# SEA HERE - rm bdr and vpi if other holders - maybe make an avoid these symbols list
+
+        while("" in holderslist): # if the only holder was the retainer, the list ended up with just 1 element of "" - need to get rid of that
+            holderslist.remove("")
+        
+
+        if numberEASTHoldings == 0 and numberEASTRetained == 0: # unique to EAST and no retained copies, write to disp and unique
             disposition[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
             unique_to_EAST[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             continue
         
-        if len(holderslist) == 0:  # no spare copies in EAST, all holders were retainers, write to disp
+        if len(holderslist) == 0:  # no spare copies in EAST, or all holders were retainers, write to disp
             disposition[sym].append([sym, socn, "no unretained copies in EAST", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
-            #unique_to_EAST[sym].append([sym, socn, "no unretained copies in EAST", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             continue
 
         if numberEASTRetained > 4: # already have enough of these, write to disposition
@@ -217,7 +265,18 @@ def main():
             
             realloc_lib = random.choice(holderslist) # a better allocation method would be to look at ALL holders across ALL requests and allocate
             #print(realloc_lib)
-            disposition[sym].append([sym, socn, realloc_lib, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
+            disposition[sym].append([sym, socn, realloc_lib, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
+            if realloc_lib == "":
+                print("LEN: ", len(holderslist)) # so this says one, and it is one empty string
+                print("Line number: ", x)
+                print("TITLE: ", title)
+                print(holderslist)
+                print("REALLOC LIB: ", realloc_lib)
+
+            if (Testing and cocn == 13694757) or (Testing and cocn == 4444):
+                print("\n", cocn, "Retention should be TEU and went to", realloc_lib, '\n')
+                assert realloc_lib == "TEU"
+                
             request_retain[realloc_lib].append([realloc_lib, socn, sym, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat]) 
            
         else:
@@ -226,9 +285,9 @@ def main():
 
     ##### this marks the end of processing the input file of retention reallocation requests with their oclc holdings
 
-    disp_column_names    = ["Symbol", "Sumbitted OCLC #", "Disposition", "WorldCat Current OCLC #", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings", "Symbol Holdings Set", "Symbol Retention Set"]
-    unique_column_names  = ["Symbol", "Sumbitted OCLC #", "Disposition", "WorldCat Current OCLC #", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings", "Symbol Holdings Set", "Symbol Retention Set"]
-    realloc_column_names = ["Symbol", "Requested OCLC #", "Requesting Library", "WorldCat Current OCN", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings"]
+    disp_column_names    = ["Symbol", "Sumbitted OCLC #", "Disposition", "WorldCat Current OCLC #", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders Not Retaining", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings", "Symbol Holdings Set", "Symbol Retention Set"]
+    unique_column_names  = ["Symbol", "Sumbitted OCLC #", "Disposition", "WorldCat Current OCLC #", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders Not Retaining", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings", "Symbol Holdings Set", "Symbol Retention Set"]
+    realloc_column_names = ["Symbol", "Requested OCLC #", "Requesting Library", "WorldCat Current OCN", "Merged OCLC #s", "Title", "# EAST Holdings", "EAST Holders Not Retaining", "# EAST Retentions", "EAST Retainers", "# WorldCat Holdings"]
     #print(type(disposition)) # <class 'collections.defaultdict'>
     #print(type(disposition['NKF'])) # <class 'list'>
     allUnique  = pd.DataFrame(columns=unique_column_names)
@@ -241,7 +300,7 @@ def main():
         if not os.path.isdir(reports_dir + libnames[lib]):
             os.mkdir(reports_dir + libnames[lib])
     for lib in request_retain: # make directories - this is every symbol of whom we are asking that we retain something
-        if not os.path.isdir(reports_dir + libnames[lib]):
+        if not os.path.isdir(reports_dir + libnames[lib]): # this fails if input column "EAST Holdings Symbols" has spaces, maybe test when loading up holderslist
             os.mkdir(reports_dir + libnames[lib])
         
     for lib in symbol_dict: # foreach lib in the disposition report - this does their unqiques and disposition file
