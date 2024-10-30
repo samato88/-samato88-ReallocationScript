@@ -5,11 +5,13 @@ import time
 import os, shutil
 import pandas as pd
 import pandas.io.formats.excel
-from _collections import defaultdict
+from collections import defaultdict
 import numpy as np
 import random
 import getMembers
 from openpyxl.styles import Font, Fill, NamedStyle, Border, Side, PatternFill, Alignment
+from pprint import pprint
+
 
 if len(argv) < 2:
     print("Must provide file name to process!")
@@ -19,14 +21,17 @@ if len(argv) < 2:
 # Latest Updates
 #  dealing with multiple symbols, e.g. Tufts - don't assign from one to the other. 
 #  add testing asserts
+#  10/30/24 - fixed error where, due to multisymbolslist sticking around, some libraries where assigned retentions for what they had requested realloc
+#             Added assert at ~280 to assure that doesn't happen again
 
 # Flowchart: https://lucid.app/lucidchart/daed3c42-4466-4311-9189-93d619793a45/edit?viewport_loc=383%2C384%2C1599%2C1513%2C0_0&invitationId=inv_d0a64fd9-e2c9-433c-b767-9c98a2070647
 
-## UPDATE reports_dir variable ln 90 before running. Note that script DELETES anything in that dir when starting
-##  this script last run on live data May 2023
+## N.B. UPDATE reports_dir variable ln 90 before running. Note that script DELETES anything in that dir when starting
+##  this script last run on live data Sept 2024
+## Also might want to update the lastresortlist symbols
 ##  have run with test reports_dir as output to try to fix summary report which had wrong sum # allocated
 ## (Reallocation) samato:~/Dropbox/EAST/OCLC/Reallocation/Script>
-##     python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/2023/2024-WithHoldings.NoPascal.csv
+##     python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/2023/2023-WithHoldings.NoPascal.csv
 
 
 # input file must have these headers (these are created by default by script that looks up data in OCLC api - pySharedPrint):
@@ -36,13 +41,13 @@ if len(argv) < 2:
 # GOAL:  Report out :
 # excel files with disposition of requests, any uniques, and any requests to retain for EAST
 # also makes a summary sheet - Take UNIQUE tab and ADDED TO TRACKING SHEET 
-#
+# 
 
 # NOTE "XlsxWriter is designed only as a file writer. It cannot read or modify an existing Excel file." - https://xlsxwriter.readthedocs.io/faq.html#q-can-xlsxwriter-use-an-existing-excel-file-as-a-template
 # so have to use openpyxl if want to ADD a sheet to existing file. This means reworking formatting headers. 
 
 #testfile:
-#/Users/samato/Dropbox/EAST/OCLC/Reallocation/sampleInput.csv
+#/Users/samato/Dropbox/EAST/OCLC/Reallocation/sampleInput.csv  
 # (venv) : python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/sampleInput.csv
 
 def columnHeader(sheet): # in theory could alternatively create named stye
@@ -88,7 +93,9 @@ def columnHeader(sheet): # in theory could alternatively create named stye
 
 def main():
     starttime = time.time()
-    Testing = False
+    Testing = True
+
+    lastresortlist = ['VPI','BDR'] # only assign to these symbols if no other holders
     
     if Testing: #python3 Reallocations.py /Users/samato/Dropbox/EAST/OCLC/Reallocation/sampleInput.csv
         reports_dir = "/Users/samato/Dropbox/EAST/OCLC/Reallocation/Tests/"
@@ -104,7 +111,6 @@ def main():
             shutil.rmtree(path)
         except OSError:
             os.remove(path)
-    
     
     pd.io.formats.excel.ExcelFormatter.header_style = None # going to reset excel header format later on, turn off default here https://stackoverflow.com/questions/36694313/pandas-xlsxwriter-format-header/55666917
 
@@ -196,19 +202,24 @@ def main():
                 print("MultiSymbols:" , sym, ":", multisymbolslist)
                 print("  Retainers:", retainerslist)
                 print("  Holders  :", holderslist)        
-            
+       
         if (sym in holderslist) or ('multisymbolslist' in locals() and any(item in multisymbolslist for item in holderslist)):
         #if sym in holderslist: # check if sym in holders list, if so remove and decrement holdings, remove all multisymbols also from holdings
-            syminholderslist = "YES" # doing this separately from below so can flag things that still have holdings set, will be yes even if multisymbol 
+            syminholderslist = "YES" # doing this separately from below so can flag things that still have holdings set, will be yes even if multisymbol
+
             if 'multisymbolslist' in locals(): # multisymbol list exists, remove all symbols for this lib from holders
                 holderslist = [item for item in holderslist if item not in multisymbolslist] # remove all lib symbols from holders list
+                del multisymbolslist # reset multisymbolslist, otherwise sticks around and causes chaos
                 if Testing:
-                        print("  Sym in Holders List", sym)
+                        print("  Sym multi in Holders List", sym)
                         print("  Updated holders list:", holderslist)
                         if cocn == 222 or cocn == 7777777:
                             assert len(holderslist) == 1 # holderslist for test 222 should just be single symbol RRR
-            else: 
+            else:  
                 holderslist.remove(sym)
+                if Testing:
+                    print("  Sym in Holders List *", sym, "*")
+                    print("  Updated holders list:", holderslist) 
                 
             numberEASTHoldings -= 1  
             
@@ -236,11 +247,14 @@ def main():
 
         holderslist = list(set(holderslist) - set(retainerslist)) # remove retainers from holderslist so they don't get allocated again
 
-# SEA HERE - rm bdr and vpi if other holders - maybe make an avoid these symbols list
+        # Remove last resort libraries if others hold it, if only last resort libs continue on to randomly assign one  (unless we come up with some other cascading method. )
+        if Testing:
+            print("Number of non lastresort symbols", len( list(set(holderslist) - set(lastresortlist))))
+        if len( list(set(holderslist) - set(lastresortlist))) != 0:
+            holderslist = list(set(holderslist) - set(lastresortlist)) # remove last resort libraries if others hold it
 
         while("" in holderslist): # if the only holder was the retainer, the list ended up with just 1 element of "" - need to get rid of that
             holderslist.remove("")
-        
 
         if numberEASTHoldings == 0 and numberEASTRetained == 0: # unique to EAST and no retained copies, write to disp and unique
             disposition[sym].append([sym, socn, "unique", cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist]) 
@@ -265,6 +279,7 @@ def main():
             
             realloc_lib = random.choice(holderslist) # a better allocation method would be to look at ALL holders across ALL requests and allocate
             #print(realloc_lib)
+            assert sym != realloc_lib # Make sure that realloc lib is not requesting lib - shouldn't happen
             disposition[sym].append([sym, socn, realloc_lib, cocn, mocn, title, numberEASTHoldings, ','.join(holderslist), numberEASTRetained, ','.join(retainerslist), worldCat, syminholderslist, syminretentionslist])
             if realloc_lib == "":
                 print("LEN: ", len(holderslist)) # so this says one, and it is one empty string
